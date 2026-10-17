@@ -3632,6 +3632,21 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
             Tuple of (response text, model_used, usage). On success model_used is the full model
             name and usage is a dict with prompt_tokens, completion_tokens, total_tokens.
         """
+        # Cost guard: cap prompt length to prevent runaway token bills.
+        # Normal analysis prompts are well under 100K chars; on high-news
+        # days (e.g. earnings season) the context pack has ballooned to
+        # millions of chars, burning 40-160x the normal daily cost.
+        _MAX_PROMPT_CHARS = 100000
+        if len(prompt) > _MAX_PROMPT_CHARS:
+            logger.warning(
+                "[CostGuard] prompt truncated: %d -> %d chars",
+                len(prompt), _MAX_PROMPT_CHARS,
+            )
+            prompt = (
+                prompt[:_MAX_PROMPT_CHARS]
+                + "\n\n[系统注: 上下文过长已截断，仅保留前 %d 字符]"
+                % _MAX_PROMPT_CHARS
+            )
         config = self._get_runtime_config()
         max_tokens = (
             generation_config.get('max_output_tokens')
